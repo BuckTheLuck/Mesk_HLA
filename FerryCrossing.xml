@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<objectModel xsi:schemaLocation="http://standards.ieee.org/IEEE1516-2010 http://standards.ieee.org/downloads/1516/1516.2-2010/IEEE1516-DIF-2010.xsd"
+             xmlns="http://standards.ieee.org/IEEE1516-2010"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <modelIdentification>
+        <name>RiverCrossingFederation</name>
+        <type>FOM</type>
+        <version>1.0</version>
+    </modelIdentification>
+
+    <objects>
+        <objectClass>
+            <name>HLAobjectRoot</name>
+            <objectClass>
+                <name>Prom</name>
+                <sharing>PublishSubscribe</sharing>
+                <attribute>
+                    <name>IdentyfikatorPromu</name><dataType>HLAunicodeString</dataType>
+                    <updateType>Static</updateType><ownership>NoTransfer</ownership><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
+                </attribute>
+                <attribute>
+                    <name>Polozenie</name><dataType>HLAinteger32BE</dataType>
+                    <updateType>Conditional</updateType><ownership>NoTransfer</ownership><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
+                </attribute>
+                <attribute>
+                    <name>TypZaladunku</name><dataType>EntityTypeEnum</dataType>
+                    <updateType>Conditional</updateType><ownership>NoTransfer</ownership><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
+                </attribute>
+                <attribute>
+                    <name>LiczbaPasazerowNaPokladzie</name><dataType>HLAinteger32BE</dataType>
+                    <updateType>Conditional</updateType><ownership>NoTransfer</ownership><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
+                </attribute>
+                <attribute>
+                    <name>CzySamochodNaPokladzie</name><dataType>HLAboolean</dataType>
+                    <updateType>Conditional</updateType><ownership>NoTransfer</ownership><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
+                </attribute>
+                <attribute>
+                    <name>LiczbaKursowPromu</name><dataType>HLAinteger32BE</dataType>
+                    <updateType>Conditional</updateType><ownership>NoTransfer</ownership><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
+                </attribute>
+            </objectClass>
+            <objectClass>
+                <name>Stacja</name>
+                <sharing>PublishSubscribe</sharing>
+                <attribute>
+                    <name>IdentyfikatorStacji</name><dataType>HLAinteger32BE</dataType>
+                    <updateType>Static</updateType><ownership>NoTransfer</ownership><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
+                </attribute>
+                <attribute>
+                    <name>LiczbaOczekujacychSamochodow</name><dataType>HLAinteger32BE</dataType>
+                    <updateType>Conditional</updateType><ownership>NoTransfer</ownership><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
+                </attribute>
+                <attribute>
+                    <name>LiczbaOczekujacychOsob</name><dataType>HLAinteger32BE</dataType>
+                    <updateType>Conditional</updateType><ownership>NoTransfer</ownership><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
+                </attribute>
+            </objectClass>
+        </objectClass>
+    </objects>
+
+    <interactions>
+        <interactionClass>
+            <name>HLAinteractionRoot</name>
+            <interactionClass>
+                <name>ZarzadzanieSymulacja</name><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
+                <interactionClass>
+                    <name>RozpocznijSymulacje</name><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
+                    <parameter><name>LiczbaStacji</name><dataType>HLAinteger32BE</dataType></parameter>
+                    <parameter><name>MaksymalnaDlugoscKolejkiSamochodow</name><dataType>HLAinteger32BE</dataType></parameter>
+                    <parameter><name>MaksymalnaDlugoscKolejkiOsob</name><dataType>HLAinteger32BE</dataType></parameter>
+                    <parameter><name>PojemnoscOsobPromu</name><dataType>HLAinteger32BE</dataType></parameter>
+                </interactionClass>
+                <interactionClass>
+                    <name>WszystkieJednostkiPrzetransportowane</name><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
+                    <parameter><name>LiczbaWykonanychKursow</name><dataType>HLAinteger32BE</dataType></parameter>
+                </interactionClass>
+            </interactionClass>
+            <interactionClass>
+                <name>OperacjePromu</name><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
+                <interactionClass>
+                    <name>PrzybyciePromuNaStacje</name><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
+                    <parameter><name>IdentyfikatorPromu</name><dataType>HLAunicodeString</dataType></parameter>
+                    <parameter><name>IdentyfikatorStacji</name><dataType>HLAinteger32BE</dataType></parameter>
+                </interactionClass>
+                <interactionClass>
+                    <name>ZaladunekRozpoczety</name><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
+                    <parameter><name>IdentyfikatorPromu</name><dataType>HLAunicodeString</dataType></parameter>
+                    <parameter><name>IdentyfikatorStacji</name><dataType>HLAinteger32BE</dataType></parameter>
+                    <parameter><name>TypZaladunku</name><dataType>EntityTypeEnum</dataType></parameter>
+                    <parameter><name>LiczbaZabieranychJednostek</name><dataType>HLAinteger32BE</dataType></parameter>
+                </interactionClass>
+                <interactionClass>
+                    <name>ZaladunekZakonczony</name><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
+                    <parameter><name>IdentyfikatorPromu</name><dataType>HLAunicodeString</dataType></parameter>
+                    <parameter><name>IdentyfikatorStacji</name><dataType>HLAinteger32BE</dataType></parameter>
+                </interactionClass>
+                <interactionClass>
+                    <name>OdplynieciePromuZeStacji</name><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
+                    <parameter><name>IdentyfikatorPromu</name><dataType>HLAunicodeString</dataType></parameter>
+                    <parameter><name>IdentyfikatorStacjiDocelowej</name><dataType>HLAinteger32BE</dataType></parameter>
+                </interactionClass>
+            </interactionClass>
+        </interactionClass>
+    </interactions>
+
+    <dataTypes>
+        <basicDataRepresentations>
+            <basicData><name>HLAinteger32BE</name><size>32</size><interpretation>Integer in big-endian byte order</interpretation><endian>Big</endian><encoding>32-bit signed integer. Most significant octet first.</encoding></basicData>
+            <basicData><name>HLAboolean</name><size>32</size><interpretation>Boolean</interpretation><endian>Big</endian><encoding>32-bit representation of a boolean. True is 1, False is 0.</encoding></basicData>
+            <basicData><name>HLAunicodeString</name><size>Variable</size><interpretation>Unicode string</interpretation><endian>Big</endian><encoding>HLAvariableArray:HLAoctetPairBE</encoding></basicData>
+        </basicDataRepresentations>
+        <enumeratedDataTypes>
+            <enumeratedData>
+                <name>EntityTypeEnum</name><representation>HLAinteger32BE</representation><semantics>Defines the type of entity (vehicle, people, or empty).</semantics>
+                <enumerator><name>PUSTY</name><value>0</value></enumerator>
+                <enumerator><name>SAMOCHOD</name><value>1</value></enumerator>
+                <enumerator><name>OSOBY</name><value>2</value></enumerator>
+            </enumeratedData>
+        </enumeratedDataTypes>
+    </dataTypes>
+
+    <synchronizations>
+        <synchronizationPoint><label>ReadyToRun</label><dataType>NA</dataType><capability>Register</capability></synchronizationPoint>
+    </synchronizations>
+</objectModel>
