@@ -14,16 +14,7 @@
  */
 package Stacja;
 
-import hla.rti1516e.FederateHandleSet;
-import hla.rti1516e.InteractionClassHandle;
-import hla.rti1516e.LogicalTime;
-import hla.rti1516e.NullFederateAmbassador;
-import hla.rti1516e.ObjectClassHandle;
-import hla.rti1516e.ObjectInstanceHandle;
-import hla.rti1516e.OrderType;
-import hla.rti1516e.ParameterHandleValueMap;
-import hla.rti1516e.SynchronizationPointFailureReason;
-import hla.rti1516e.TransportationTypeHandle;
+import hla.rti1516e.*;
 import hla.rti1516e.encoding.DecoderException;
 import hla.rti1516e.encoding.HLAinteger32BE;
 import hla.rti1516e.exceptions.FederateInternalError;
@@ -61,6 +52,7 @@ public class StacjaFederateAmbassador extends NullFederateAmbassador
 
 	protected boolean isRunning       = true;
 
+	private ObjectInstanceHandle promObjectHandle;
 	//----------------------------------------------------------
 	//                      CONSTRUCTORS
 	//----------------------------------------------------------
@@ -142,7 +134,39 @@ public class StacjaFederateAmbassador extends NullFederateAmbassador
 
 		log("Discovered Object: handle=" + theObject + ", classHandle=" +
 				theObjectClass + ", name=" + objectName);
+
+		try {
+			if (theObjectClass.equals(federate.rtiamb.getObjectClassHandle("HLAobjectRoot.Prom"))) {
+				log("   ^^^ That's the Ferry! Storing its handle.");
+				this.promObjectHandle = theObject;
+			}
+		} catch (RTIexception e) {
+			e.printStackTrace();
+		}
 	}
+
+	@Override
+	public void reflectAttributeValues(ObjectInstanceHandle theObject,
+									   AttributeHandleValueMap theAttributes,
+									   byte[] tag,
+									   OrderType sentOrdering,
+									   TransportationTypeHandle theTransport,
+									   LogicalTime time,
+									   OrderType receivedOrdering,
+									   SupplementalReflectInfo reflectInfo) throws FederateInternalError {
+		if (theObject.equals(this.promObjectHandle)) {
+			if (theAttributes.containsKey(federate.promTripCountHandle)) {
+				try {
+					HLAinteger32BE tripsDecoder = new HLA1516eInteger32BE();
+					tripsDecoder.decode(theAttributes.get(federate.promTripCountHandle));
+					federate.updateTripCount(tripsDecoder.getValue());
+				} catch (DecoderException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+
 
 	@Override
 	public void receiveInteraction(InteractionClassHandle interactionClass,
@@ -154,50 +178,39 @@ public class StacjaFederateAmbassador extends NullFederateAmbassador
 								   OrderType receivedOrdering,
 								   SupplementalReceiveInfo receiveInfo) throws FederateInternalError {
 
-		if (interactionClass.equals(federate.startSimulationHandle)) {
-			log("Received 'RozpocznijSymulacje' interaction!");
-			try {
+		try {
+			if (interactionClass.equals(federate.startSimulationHandle)) {
+				log("Received 'RozpocznijSymulacje' interaction!");
+
 				HLAinteger32BE stacjeDecoder = new HLA1516eInteger32BE();
 				stacjeDecoder.decode(theParameters.get(federate.rtiamb.getParameterHandle(interactionClass, "LiczbaStacji")));
-
-				HLAinteger32BE kolejkaOsobDecoder = new HLA1516eInteger32BE();
-				kolejkaOsobDecoder.decode(theParameters.get(federate.rtiamb.getParameterHandle(interactionClass, "MaksymalnaDlugoscKolejkiOsob")));
-
-				HLAinteger32BE kolejkaAutDecoder = new HLA1516eInteger32BE();
-				kolejkaAutDecoder.decode(theParameters.get(federate.rtiamb.getParameterHandle(interactionClass, "MaksymalnaDlugoscKolejkiSamochodow")));
-
-				federate.startSimulation(stacjeDecoder.getValue(), kolejkaOsobDecoder.getValue(), kolejkaAutDecoder.getValue());
-
-			} catch (RTIexception | DecoderException e) {
-				e.printStackTrace();
+				federate.startSimulation(stacjeDecoder.getValue());
 			}
-		}
-		// 2. Sprawdź, czy to interakcja ZAŁADUNKU
-		else if (interactionClass.equals(federate.zaladunekHandle)) {
-			log("Received 'ZaladunekRozpoczety' interaction!");
-			try {
-				// Dekoduj parametry załadunku
+
+			else if (interactionClass.equals(federate.zaladunekHandle)) {
+
 				HLAinteger32BE stationIdDecoder = new HLA1516eInteger32BE();
 				stationIdDecoder.decode(theParameters.get(federate.rtiamb.getParameterHandle(interactionClass, "IdentyfikatorStacji")));
-
 				HLAinteger32BE entityTypeDecoder = new HLA1516eInteger32BE();
 				entityTypeDecoder.decode(theParameters.get(federate.rtiamb.getParameterHandle(interactionClass, "TypZaladunku")));
-
 				HLAinteger32BE countDecoder = new HLA1516eInteger32BE();
 				countDecoder.decode(theParameters.get(federate.rtiamb.getParameterHandle(interactionClass, "LiczbaZabieranychJednostek")));
 
 				int stationId = stationIdDecoder.getValue();
 				int entityType = entityTypeDecoder.getValue();
 				int count = countDecoder.getValue();
-
 				int peopleCount = (entityType == 2) ? count : 0;
 				int carCount = (entityType == 1) ? count : 0;
 
 				federate.handleBoarding(stationId, peopleCount, carCount);
-
-			} catch (RTIexception | DecoderException e) {
-				e.printStackTrace();
 			}
+
+			else if (interactionClass.equals(federate.endSimulationHandle)) {
+				log("END SIGNAL");
+				this.isRunning = false;
+			}
+		} catch (RTIexception | DecoderException e) {
+			e.printStackTrace();
 		}
 	}
 

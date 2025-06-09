@@ -4,9 +4,9 @@
  *   This file is part of portico.
  *
  *   portico is free software; you can redistribute it and/or modify
- *   it under the terms of the Common Developer and Distribution License (CDDL) 
+ *   it under the terms of the Common Developer and Distribution License (CDDL)
  *   as published by Sun Microsystems. For more information see the LICENSE file.
- *   
+ *
  *   Use of this software is strictly AT YOUR OWN RISK!!!
  *   If something bad happens you do not have permission to come crying to me.
  *   (that goes for your lawyer as well)
@@ -47,19 +47,18 @@ public class StacjaFederate
 	// caches of handle types - set once we join a federation
 	protected ObjectClassHandle stationHandle;
 	protected AttributeHandle stationIdHandle, peopleInQueueHandle, carsInQueueHandle;
-	protected InteractionClassHandle zaladunekHandle, startSimulationHandle;
+	protected InteractionClassHandle zaladunekHandle, startSimulationHandle, endSimulationHandle;
+	protected AttributeHandle promTripCountHandle;
 	private List<ObjectInstanceHandle> stationInstanceHandles = new ArrayList<>();
 
-	// Stan symulacji
 	private List<Queue<Object>> peopleQueues = new ArrayList<>();
 	private List<Queue<Object>> carQueues = new ArrayList<>();
-	private Random random = new Random();
 
-	// Parametry symulacji
 	private int liczbaStacji = 0;
-	private int maksKolejkaOsob = 0;
-	private int maksKolejkaAut = 0;
 	private boolean simulationStarted = false;
+	private boolean simulationFinished = false;
+	private int finalTripCount = 0;
+	private Random random = new Random();
 	//----------------------------------------------------------
 	//                      CONSTRUCTORS
 	//----------------------------------------------------------
@@ -88,11 +87,10 @@ public class StacjaFederate
 		}
 		catch( Exception e )
 		{
-			log( "Error while waiting for user input: " + e.getMessage() );
 			e.printStackTrace();
 		}
 	}
-	
+
 	///////////////////////////////////////////////////////////////////////////
 	////////////////////////// Main Simulation Method /////////////////////////
 	///////////////////////////////////////////////////////////////////////////
@@ -125,7 +123,7 @@ public class StacjaFederate
 			URL[] modules = new URL[]{
 			    (new File(Config.FOM_PATH)).toURI().toURL()
 			};
-			
+
 			rtiamb.createFederationExecution( Config.FEDERATION_NAME, modules );
 			log( "Created Federation" );
 		}
@@ -139,7 +137,7 @@ public class StacjaFederate
 			urle.printStackTrace();
 			return;
 		}
-		
+
 		////////////////////////////
 		// 4. join the federation //
 		////////////////////////////
@@ -150,7 +148,7 @@ public class StacjaFederate
 		                                 );           // modules we want to add
 
 		log( "Joined Federation as " + federateName );
-		
+
 		// cache the time factory for easy access
 		this.timeFactory = (HLAfloat64TimeFactory)rtiamb.getTimeFactory();
 
@@ -208,31 +206,81 @@ public class StacjaFederate
 		// send an interaction.
 		while (!simulationStarted) {
 			advanceTime(1.0);
-			log("... still waiting for start signal at time: " + fedamb.federateTime);
 		}
 
 		// Inicjalizacja stacji
 		initializeStations();
-
+		FillQueues();
+		updateAllStationAttributes();
 		while (fedamb.isRunning) {
-			generateArrivals();
 			updateAllStationAttributes();
+
+			if (!simulationFinished && areAllQueuesEmpty()) {
+				log(" Wszystkie kolejki puste. Kończenie symulacji");
+				advanceTime(2.0);
+				sendEndSimulationInteraction();
+				simulationFinished = true;
+				break;
+			}
 			advanceTime(1.0);
 			log("Time Advanced to " + fedamb.federateTime);
 		}
 
 		rtiamb.resignFederationExecution(ResignAction.DELETE_OBJECTS);
+		log("Resigned from Federation");
+		try {
+			rtiamb.destroyFederationExecution(Config.FEDERATION_NAME);
+			log("Destroyed Federation");
+		} catch (FederationExecutionDoesNotExist | FederatesCurrentlyJoined | RTIinternalError e) {
+			log("Didn't destroy federation: " + e.getMessage());
+		}
 	}
-	
+
 	////////////////////////////////////////////////////////////////////////////
 	////////////////////////////// Helper Methods //////////////////////////////
 	////////////////////////////////////////////////////////////////////////////
-	protected void startSimulation(int liczbaStacji, int maksKolejkaOsob, int maksKolejkaAut) {
+	protected void startSimulation(int liczbaStacji) {
 		log("Received StartSimulation interaction: stations=" + liczbaStacji);
 		this.liczbaStacji = liczbaStacji;
-		this.maksKolejkaOsob = maksKolejkaOsob;
-		this.maksKolejkaAut = maksKolejkaAut;
+
 		this.simulationStarted = true;
+	}
+
+	private void FillQueues() {
+		for (int i = 0; i < this.liczbaStacji; i++) {
+			for (int j = 0; j < Config.MAKS_LACZNA_POJEMNOSC_STACJI; j++) {
+				if (random.nextDouble() < Config.CAR_PROBABILITY) {
+						carQueues.get(i).add(new Object());
+				} else {
+						peopleQueues.get(i).add(new Object());
+				}
+			}
+			log("Station " + i + ": Filled with " + peopleQueues.get(i).size() + " people and " + carQueues.get(i).size() + " cars.");
+		}
+	}
+
+	private boolean areAllQueuesEmpty() {
+		for (Queue<Object> queue : peopleQueues) {
+			if (!queue.isEmpty()) return false;
+		}
+		for (Queue<Object> queue : carQueues) {
+			if (!queue.isEmpty()) return false;
+		}
+		return true;
+	}
+
+	private void sendEndSimulationInteraction() throws RTIexception {
+		log("Wysyłanie interakcji 'WszystkieJednostkiPrzetransportowane' z liczbą kursów: " + this.finalTripCount);
+		ParameterHandleValueMap parameters = rtiamb.getParameterHandleValueMapFactory().create(1);
+		parameters.put(rtiamb.getParameterHandle(this.endSimulationHandle, "LiczbaWykonanychKursow"),
+				encoderFactory.createHLAinteger32BE(this.finalTripCount).toByteArray());
+		HLAfloat64Time time = timeFactory.makeTime(fedamb.federateTime + fedamb.federateLookahead);
+		rtiamb.sendInteraction(this.endSimulationHandle, parameters, generateTag(), time);
+	}
+
+	protected void updateTripCount(int trips) {
+		this.finalTripCount = trips;
+		log("Received trip count update from Ferry: " + trips);
 	}
 
 	private void initializeStations() throws RTIexception {
@@ -245,18 +293,10 @@ public class StacjaFederate
 		}
 	}
 
-	private void generateArrivals() {
-		for (int i = 0; i < this.liczbaStacji; i++) {
-			if (random.nextDouble() < Config.PERSON_ARRIVAL_PROBABILITY && peopleQueues.get(i).size() < this.maksKolejkaOsob) {
-				peopleQueues.get(i).add(new Object());
-			}
-			if (random.nextDouble() < Config.CAR_ARRIVAL_PROBABILITY && carQueues.get(i).size() < this.maksKolejkaAut) {
-				carQueues.get(i).add(new Object());
-			}
-		}
-	}
 
 	private void updateAllStationAttributes() throws RTIexception {
+		HLAfloat64Time time = timeFactory.makeTime(fedamb.federateTime + fedamb.federateLookahead);
+
 		for (int i = 0; i < this.liczbaStacji; i++) {
 			AttributeHandleValueMap attributes = rtiamb.getAttributeHandleValueMapFactory().create(3);
 
@@ -268,15 +308,34 @@ public class StacjaFederate
 			attributes.put(peopleInQueueHandle, peopleCountValue.toByteArray());
 			attributes.put(carsInQueueHandle, carCountValue.toByteArray());
 
-			rtiamb.updateAttributeValues(stationInstanceHandles.get(i), attributes, generateTag());
+			rtiamb.updateAttributeValues(stationInstanceHandles.get(i), attributes, generateTag(), time);
 		}
 	}
 
 	protected void handleBoarding(int stationId, int peopleCount, int carCount) {
+		// Logujemy informację o zdarzeniu
 		log("Handling boarding at station " + stationId + ": " + peopleCount + " people, " + carCount + " cars.");
+
+		// Wyświetlamy komunikaty o załadowanym towarze
+		if(peopleCount > 0) {
+			log("Stacja " + stationId + ": Potwierdzono załadunek " + peopleCount + " osób na prom.");
+		}
+		if(carCount > 0) {
+			log("Stacja " + stationId + ": Potwierdzono załadunek " + carCount + " samochodu na prom.");
+		}
+
+		// Aktualizujemy wewnętrzny stan kolejek - usuwamy załadowane jednostki
 		if (stationId >= 0 && stationId < this.liczbaStacji) {
-			for (int i = 0; i < peopleCount; i++) if (!peopleQueues.get(stationId).isEmpty()) peopleQueues.get(stationId).poll();
-			for (int i = 0; i < carCount; i++) if (!carQueues.get(stationId).isEmpty()) carQueues.get(stationId).poll();
+			for (int i = 0; i < peopleCount; i++) {
+				if (!peopleQueues.get(stationId).isEmpty()) {
+					peopleQueues.get(stationId).poll();
+				}
+			}
+			for (int i = 0; i < carCount; i++) {
+				if (!carQueues.get(stationId).isEmpty()) {
+					carQueues.get(stationId).poll();
+				}
+			}
 		}
 	}
 
@@ -290,9 +349,9 @@ public class StacjaFederate
 		// NOTE: Unfortunately, the LogicalTime/LogicalTimeInterval create code is
 		//       Portico specific. You will have to alter this if you move to a
 		//       different RTI implementation. As such, we've isolated it into a
-		//       method so that any change only needs to happen in a couple of spots 
+		//       method so that any change only needs to happen in a couple of spots
 		HLAfloat64Interval lookahead = timeFactory.makeInterval( fedamb.federateLookahead );
-		
+
 		////////////////////////////
 		// enable time regulation //
 		////////////////////////////
@@ -303,19 +362,19 @@ public class StacjaFederate
 		{
 			rtiamb.evokeMultipleCallbacks( 0.1, 0.2 );
 		}
-		
+
 		/////////////////////////////
 		// enable time constrained //
 		/////////////////////////////
 		this.rtiamb.enableTimeConstrained();
-		
+
 		// tick until we get the callback
 		while( fedamb.isConstrained == false )
 		{
 			rtiamb.evokeMultipleCallbacks( 0.1, 0.2 );
 		}
 	}
-	
+
 	/**
 	 * This method will inform the RTI about the types of data that the federate will
 	 * be creating, and the types of data we are interested in hearing about as other
@@ -334,9 +393,17 @@ public class StacjaFederate
 
 		zaladunekHandle = rtiamb.getInteractionClassHandle("HLAinteractionRoot.OperacjePromu.ZaladunekRozpoczety");
 		rtiamb.subscribeInteractionClass(zaladunekHandle);
-
 		startSimulationHandle = rtiamb.getInteractionClassHandle("HLAinteractionRoot.ZarzadzanieSymulacja.RozpocznijSymulacje");
 		rtiamb.subscribeInteractionClass(startSimulationHandle);
+
+		this.endSimulationHandle = rtiamb.getInteractionClassHandle("HLAinteractionRoot.ZarzadzanieSymulacja.WszystkieJednostkiPrzetransportowane");
+		rtiamb.publishInteractionClass(this.endSimulationHandle);
+
+		ObjectClassHandle promHandle = rtiamb.getObjectClassHandle("HLAobjectRoot.Prom");
+		this.promTripCountHandle = rtiamb.getAttributeHandle(promHandle, "LiczbaKursowPromu");
+		AttributeHandleSet promAttributes = rtiamb.getAttributeHandleSetFactory().create();
+		promAttributes.add(this.promTripCountHandle);
+		rtiamb.subscribeObjectClassAttributes(promHandle, promAttributes);
 	}
 	/**
 	 * This method will request a time advance to the current time, plus the given
@@ -349,7 +416,7 @@ public class StacjaFederate
 		fedamb.isAdvancing = true;
 		HLAfloat64Time time = timeFactory.makeTime( fedamb.federateTime + timestep );
 		rtiamb.timeAdvanceRequest( time );
-		
+
 		// wait for the time advance to be granted. ticking will tell the
 		// LRC to start delivering callbacks to the federate
 		while( fedamb.isAdvancing )
@@ -379,7 +446,7 @@ public class StacjaFederate
 		{
 			federateName = args[0];
 		}
-		
+
 		try
 		{
 			// run the example federate

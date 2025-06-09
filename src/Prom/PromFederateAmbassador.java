@@ -22,6 +22,11 @@ import hla.rti1516e.exceptions.RTIexception;
 import hla.rti1516e.time.HLAfloat64Time;
 import org.portico.impl.hla1516e.types.encoding.HLA1516eInteger32BE;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
 /**
  * This class handles all incoming callbacks from the RTI regarding a particular
  * {@link PromFederate}. It will log information about any callbacks it
@@ -51,6 +56,9 @@ public class PromFederateAmbassador extends NullFederateAmbassador
 
 
 	protected boolean isRunning       = true;
+
+	private Set<ObjectInstanceHandle> stacjaObjectHandles = new HashSet<>();
+	private Map<ObjectInstanceHandle, Integer> stacjaHandleToIdMap = new HashMap<>();
 
 	//----------------------------------------------------------
 	//                      CONSTRUCTORS
@@ -126,24 +134,46 @@ public class PromFederateAmbassador extends NullFederateAmbassador
 	}
 
 	@Override
-	public void reflectAttributeValues(ObjectInstanceHandle theObject, AttributeHandleValueMap theAttributes, byte[] tag, OrderType sentOrdering, TransportationTypeHandle theTransport, LogicalTime time, OrderType receivedOrdering, SupplementalReflectInfo reflectInfo) throws FederateInternalError {
-		if (theAttributes.containsKey(federate.stacjaIdHandle)) {
+	public void discoverObjectInstance(ObjectInstanceHandle theObject, ObjectClassHandle theObjectClass, String objectName) {
+		log("Discovered Object: handle=" + theObject + ", classHandle=" + theObjectClass + ", name=" + objectName);
+		if (theObjectClass.equals(federate.stacjaHandle)) {
+			stacjaObjectHandles.add(theObject);
+		}
+	}
+
+	@Override
+	public void reflectAttributeValues(ObjectInstanceHandle theObject, AttributeHandleValueMap theAttributes, byte[] tag, OrderType sentOrdering, TransportationTypeHandle theTransport, LogicalTime time, OrderType receivedOrdering, SupplementalReflectInfo reflectInfo) {
+		if (stacjaObjectHandles.contains(theObject)) {
 			try {
-				HLAinteger32BE stationIdDecoder = new HLA1516eInteger32BE();
-				stationIdDecoder.decode(theAttributes.get(federate.stacjaIdHandle));
-				int stationId = stationIdDecoder.getValue();
+				if (!stacjaHandleToIdMap.containsKey(theObject)) {
+					if (theAttributes.containsKey(federate.stacjaIdHandle)) {
+						HLAinteger32BE stationIdDecoder = new HLA1516eInteger32BE();
+						stationIdDecoder.decode(theAttributes.get(federate.stacjaIdHandle));
+						int stationId = stationIdDecoder.getValue();
+						stacjaHandleToIdMap.put(theObject, stationId);
+					} else {
+						return;
+					}
+				}
 
-				HLAinteger32BE peopleDecoder = new HLA1516eInteger32BE();
-				peopleDecoder.decode(theAttributes.get(federate.liczbaOsobHandle));
-				int peopleCount = peopleDecoder.getValue();
+				Integer stationId = stacjaHandleToIdMap.get(theObject);
+				if (stationId == null) return;
 
-				HLAinteger32BE carsDecoder = new HLA1516eInteger32BE();
-				carsDecoder.decode(theAttributes.get(federate.liczbaAutHandle));
-				int carCount = carsDecoder.getValue();
+				int[] currentQueueState = federate.stacjeStan.getOrDefault(stationId, new int[]{0, 0});
 
-				federate.stacjeStan.put(stationId, new int[]{peopleCount, carCount});
+				if (theAttributes.containsKey(federate.liczbaOsobHandle)) {
+					HLAinteger32BE peopleDecoder = new HLA1516eInteger32BE();
+					peopleDecoder.decode(theAttributes.get(federate.liczbaOsobHandle));
+					currentQueueState[0] = peopleDecoder.getValue();
+				}
 
-				log("Prom updated its knowledge for Station " + stationId + " -> People: " + peopleCount + ", Cars: " + carCount);
+				if (theAttributes.containsKey(federate.liczbaAutHandle)) {
+					HLAinteger32BE carsDecoder = new HLA1516eInteger32BE();
+					carsDecoder.decode(theAttributes.get(federate.liczbaAutHandle));
+					currentQueueState[1] = carsDecoder.getValue();
+				}
+
+				federate.stacjeStan.put(stationId, currentQueueState);
 
 			} catch (DecoderException e) {
 				e.printStackTrace();
@@ -152,41 +182,31 @@ public class PromFederateAmbassador extends NullFederateAmbassador
 	}
 
 	@Override
-	public void receiveInteraction(InteractionClassHandle interactionClass,
-								   ParameterHandleValueMap theParameters,
-								   byte[] tag,
-								   OrderType sentOrdering,
-								   TransportationTypeHandle theTransport,
-								   LogicalTime time,
-								   OrderType receivedOrdering,
-								   SupplementalReceiveInfo receiveInfo) throws FederateInternalError {
-
+	public void receiveInteraction(InteractionClassHandle interactionClass, ParameterHandleValueMap theParameters, byte[] tag, OrderType sentOrdering, TransportationTypeHandle theTransport, LogicalTime time, OrderType receivedOrdering, SupplementalReceiveInfo receiveInfo) {
 		if (interactionClass.equals(federate.startSimulationHandle)) {
 			log("Received 'RozpocznijSymulacje' interaction!");
 			try {
 				HLAinteger32BE stacjeDecoder = new HLA1516eInteger32BE();
 				stacjeDecoder.decode(theParameters.get(federate.rtiamb.getParameterHandle(interactionClass, "LiczbaStacji")));
-
 				HLAinteger32BE pojemnoscDecoder = new HLA1516eInteger32BE();
 				pojemnoscDecoder.decode(theParameters.get(federate.rtiamb.getParameterHandle(interactionClass, "PojemnoscOsobPromu")));
-
 				federate.startSimulation(stacjeDecoder.getValue(), pojemnoscDecoder.getValue());
-
 			} catch (RTIexception | DecoderException e) {
 				e.printStackTrace();
 			}
+		} else if (interactionClass.equals(federate.wszystkieJednostkiPrzetransportowaneHandle)) {
+			log("!!! Otrzymano sygnał końca symulacji. Zatrzymywanie pracy... !!!");
+			this.isRunning = false;
 		}
 	}
 
-
 	@Override
-	public void removeObjectInstance(ObjectInstanceHandle theObject,
-									 byte[] tag,
-									 OrderType sentOrdering,
-									 SupplementalRemoveInfo removeInfo) throws FederateInternalError {
+	public void removeObjectInstance(ObjectInstanceHandle theObject, byte[] tag, OrderType sentOrdering, SupplementalRemoveInfo removeInfo) {
 		log("Object Removed: handle=" + theObject);
-
+		stacjaObjectHandles.remove(theObject);
+		stacjaHandleToIdMap.remove(theObject);
 	}
+
 
 	//----------------------------------------------------------
 	//                     STATIC METHODS

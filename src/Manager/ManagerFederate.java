@@ -4,9 +4,9 @@
  *   This file is part of portico.
  *
  *   portico is free software; you can redistribute it and/or modify
- *   it under the terms of the Common Developer and Distribution License (CDDL) 
+ *   it under the terms of the Common Developer and Distribution License (CDDL)
  *   as published by Sun Microsystems. For more information see the LICENSE file.
- *   
+ *
  *   Use of this software is strictly AT YOUR OWN RISK!!!
  *   If something bad happens you do not have permission to come crying to me.
  *   (that goes for your lawyer as well)
@@ -88,7 +88,7 @@ public class ManagerFederate
 			e.printStackTrace();
 		}
 	}
-	
+
 	///////////////////////////////////////////////////////////////////////////
 	////////////////////////// Main Simulation Method /////////////////////////
 	///////////////////////////////////////////////////////////////////////////
@@ -105,7 +105,7 @@ public class ManagerFederate
 		log( "Creating RTIambassador" );
 		rtiamb = RtiFactoryFactory.getRtiFactory().getRtiAmbassador();
 		encoderFactory = RtiFactoryFactory.getRtiFactory().getEncoderFactory();
-		
+
 		// connect
 		log( "Connecting..." );
 		fedamb = new ManagerFederateAmbassador( this );
@@ -122,7 +122,7 @@ public class ManagerFederate
 			URL[] modules = new URL[]{
 			    (new File(Config.FOM_PATH)).toURI().toURL(),
 			};
-			
+
 			rtiamb.createFederationExecution( Config.FEDERATION_NAME, modules );
 			log( "Created Federation" );
 		}
@@ -136,7 +136,7 @@ public class ManagerFederate
 			urle.printStackTrace();
 			return;
 		}
-		
+
 		////////////////////////////
 		// 4. join the federation //
 		////////////////////////////
@@ -146,7 +146,7 @@ public class ManagerFederate
 		                                 );           // modules we want to add
 
 		log( "Joined Federation as " + federateName );
-		
+
 		// cache the time factory for easy access
 		this.timeFactory = (HLAfloat64TimeFactory)rtiamb.getTimeFactory();
 
@@ -196,7 +196,7 @@ public class ManagerFederate
 		// produce, and all the data we want to know about
 		publishAndSubscribe();
 		log( "Published and Subscribed" );
-		
+
 		/////////////////////////////////////
 		// 10. do the main simulation loop //
 		/////////////////////////////////////
@@ -214,7 +214,7 @@ public class ManagerFederate
 
 		resignFederation();
 	}
-	
+
 	////////////////////////////////////////////////////////////////////////////
 	////////////////////////////// Helper Methods //////////////////////////////
 	////////////////////////////////////////////////////////////////////////////
@@ -225,18 +225,17 @@ public class ManagerFederate
 
 	private void sendStartSimulationInteraction() throws RTIexception {
 		log("Sending 'RozpocznijSymulacje' interaction");
-		ParameterHandleValueMap parameters = rtiamb.getParameterHandleValueMapFactory().create(4);
+		ParameterHandleValueMap parameters = rtiamb.getParameterHandleValueMapFactory().create(2);
 
 		parameters.put(rtiamb.getParameterHandle(rozpocznijSymulacjeHandle, "LiczbaStacji"),
 				encoderFactory.createHLAinteger32BE(Config.LICZBA_STACJI).toByteArray());
-		parameters.put(rtiamb.getParameterHandle(rozpocznijSymulacjeHandle, "MaksymalnaDlugoscKolejkiSamochodow"),
-				encoderFactory.createHLAinteger32BE(Config.MAKS_KOLEJKA_AUT).toByteArray());
-		parameters.put(rtiamb.getParameterHandle(rozpocznijSymulacjeHandle, "MaksymalnaDlugoscKolejkiOsob"),
-				encoderFactory.createHLAinteger32BE(Config.MAKS_KOLEJKA_OSOB).toByteArray());
 		parameters.put(rtiamb.getParameterHandle(rozpocznijSymulacjeHandle, "PojemnoscOsobPromu"),
 				encoderFactory.createHLAinteger32BE(Config.POJEMNOSC_OSOB_PROMU).toByteArray());
 
-		rtiamb.sendInteraction(rozpocznijSymulacjeHandle, parameters, generateTag());
+
+		HLAfloat64Time time = timeFactory.makeTime(fedamb.federateTime + fedamb.federateLookahead);
+		rtiamb.sendInteraction(rozpocznijSymulacjeHandle, parameters, generateTag(), time);
+		log("Scheduled 'RozpocznijSymulacje' interaction for time: " + time.getValue());
 	}
 
 	private void enableTimePolicy() throws Exception
@@ -244,9 +243,9 @@ public class ManagerFederate
 		// NOTE: Unfortunately, the LogicalTime/LogicalTimeInterval create code is
 		//       Portico specific. You will have to alter this if you move to a
 		//       different RTI implementation. As such, we've isolated it into a
-		//       method so that any change only needs to happen in a couple of spots 
+		//       method so that any change only needs to happen in a couple of spots
 		HLAfloat64Interval lookahead = timeFactory.makeInterval( fedamb.federateLookahead );
-		
+
 		////////////////////////////
 		// enable time regulation //
 		////////////////////////////
@@ -257,19 +256,19 @@ public class ManagerFederate
 		{
 			rtiamb.evokeMultipleCallbacks( 0.1, 0.2 );
 		}
-		
+
 		/////////////////////////////
 		// enable time constrained //
 		/////////////////////////////
 		this.rtiamb.enableTimeConstrained();
-		
+
 		// tick until we get the callback
 		while( fedamb.isConstrained == false )
 		{
 			rtiamb.evokeMultipleCallbacks( 0.1, 0.2 );
 		}
 	}
-	
+
 	/**
 	 * This method will inform the RTI about the types of data that the federate will
 	 * be creating, and the types of data we are interested in hearing about as other
@@ -312,8 +311,8 @@ public class ManagerFederate
 		try {
 			rtiamb.destroyFederationExecution(Config.FEDERATION_NAME);
 			log("Destroyed Federation");
-		} catch (FederationExecutionDoesNotExist | FederatesCurrentlyJoined e) {
-			log("Didn't destroy federation: " + e.getClass().getSimpleName());
+		} catch (FederationExecutionDoesNotExist | FederatesCurrentlyJoined | RTIinternalError e) {
+			log("Didn't destroy federation: " + e.getMessage());
 		}
 	}
 
@@ -338,7 +337,7 @@ public class ManagerFederate
 		{
 			federateName = args[0];
 		}
-		
+
 		try
 		{
 			// run the example federate

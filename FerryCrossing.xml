@@ -31,7 +31,7 @@
                     <updateType>Conditional</updateType><ownership>NoTransfer</ownership><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
                 </attribute>
                 <attribute>
-                    <name>CzySamochodNaPokladzie</name><dataType>HLAboolean</dataType>
+                    <name>CzySamochodNaPokladzie</name><dataType>HLAinteger32BE</dataType>
                     <updateType>Conditional</updateType><ownership>NoTransfer</ownership><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
                 </attribute>
                 <attribute>
@@ -66,8 +66,6 @@
                 <interactionClass>
                     <name>RozpocznijSymulacje</name><sharing>PublishSubscribe</sharing><transportation>HLAreliable</transportation><order>TimeStamp</order>
                     <parameter><name>LiczbaStacji</name><dataType>HLAinteger32BE</dataType></parameter>
-                    <parameter><name>MaksymalnaDlugoscKolejkiSamochodow</name><dataType>HLAinteger32BE</dataType></parameter>
-                    <parameter><name>MaksymalnaDlugoscKolejkiOsob</name><dataType>HLAinteger32BE</dataType></parameter>
                     <parameter><name>PojemnoscOsobPromu</name><dataType>HLAinteger32BE</dataType></parameter>
                 </interactionClass>
                 <interactionClass>

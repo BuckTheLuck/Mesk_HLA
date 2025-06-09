@@ -1,15 +1,15 @@
 /*
- *   Copyright 2012 The Portico Project
+ * Copyright 2012 The Portico Project
  *
- *   This file is part of portico.
+ * This file is part of portico.
  *
- *   portico is free software; you can redistribute it and/or modify
- *   it under the terms of the Common Developer and Distribution License (CDDL) 
- *   as published by Sun Microsystems. For more information see the LICENSE file.
- *   
- *   Use of this software is strictly AT YOUR OWN RISK!!!
- *   If something bad happens you do not have permission to come crying to me.
- *   (that goes for your lawyer as well)
+ * portico is free software; you can redistribute it and/or modify
+ * it under the terms of the Common Developer and Distribution License (CDDL)
+ * as published by Sun Microsystems. For more information see the LICENSE file.
+ *
+ * Use of this software is strictly AT YOUR OWN RISK!!!
+ * If something bad happens you do not have permission to come crying to me.
+ * (that goes for your lawyer as well)
  *
  */
 package Prom;
@@ -44,7 +44,7 @@ public class PromFederate
 	//----------------------------------------------------------
 	//                   INSTANCE VARIABLES
 	//----------------------------------------------------------
-    RTIambassador rtiamb;
+	RTIambassador rtiamb;
 	private PromFederateAmbassador fedamb;  // created when we connect
 	private HLAfloat64TimeFactory timeFactory; // set when we join
 	protected EncoderFactory encoderFactory;     // set when we join
@@ -61,6 +61,8 @@ public class PromFederate
 
 	// Uchwyty Interakcji
 	protected InteractionClassHandle przybycieHandle, zaladunekStartHandle, zaladunekKoniecHandle, odplyniecieHandle, startSimulationHandle;
+	protected InteractionClassHandle wszystkieJednostkiPrzetransportowaneHandle;
+
 
 	// Stan symulacji
 	private int liczbaKursow = 0;
@@ -104,7 +106,7 @@ public class PromFederate
 			e.printStackTrace();
 		}
 	}
-	
+
 	///////////////////////////////////////////////////////////////////////////
 	////////////////////////// Main Simulation Method /////////////////////////
 	///////////////////////////////////////////////////////////////////////////
@@ -206,23 +208,32 @@ public class PromFederate
 		publishAndSubscribe();
 		log("Published and Subscribed");
 
-		/////////////////////////////////////
-		// 10. do the main simulation loop //
-		/////////////////////////////////////
+		promInstanceHandle = rtiamb.registerObjectInstance(promHandle, identyfikatorPromu);
+		log("Registered Prom Object with handle " + promInstanceHandle);
+
 		while (!simulationStarted) {
 			advanceTime(1.0);
-			log("... still waiting for start signal at time: " + fedamb.federateTime);
 		}
 
 		while (fedamb.isRunning) {
-			sendInteraction(przybycieHandle, createStationParams(przybycieHandle, polozenie));
+			updatePromAttributes(0, 0, 0); // Prom jest pusty
+
+			HLAfloat64Time arrivalTime = timeFactory.makeTime(fedamb.federateTime + fedamb.federateLookahead);
+			rtiamb.sendInteraction(przybycieHandle, createStationParams(przybycieHandle, polozenie), generateTag(), arrivalTime);
+
 			advanceTime(0.5);
 
 			boardPassengersOrCars();
 
-			sendInteraction(odplyniecieHandle, createStationParams(odplyniecieHandle, (polozenie + 1) % this.liczbaStacji));
+			if (!fedamb.isRunning) {
+				break;
+			}
+
+			int nextStation = (polozenie + 1) % this.liczbaStacji;
+			HLAfloat64Time departureTime = timeFactory.makeTime(fedamb.federateTime + fedamb.federateLookahead);
+			rtiamb.sendInteraction(odplyniecieHandle, createDepartureParams(nextStation), generateTag(), departureTime);
+
 			moveToNextStation();
-			updatePromAttributes(0, 0, false);
 
 			advanceTime(1.0);
 			log("Time Advanced to " + fedamb.federateTime);
@@ -230,11 +241,52 @@ public class PromFederate
 
 		rtiamb.resignFederationExecution(ResignAction.DELETE_OBJECTS);
 		log("Resigned from Federation");
+		try {
+			rtiamb.destroyFederationExecution(Config.FEDERATION_NAME);
+			log("Destroyed Federation");
+		} catch (FederationExecutionDoesNotExist | FederatesCurrentlyJoined | RTIinternalError e) {
+			log("Didn't destroy federation: " + e.getMessage());
+		}
 	}
-	
+
 	////////////////////////////////////////////////////////////////////////////
 	////////////////////////////// Helper Methods //////////////////////////////
 	////////////////////////////////////////////////////////////////////////////
+
+
+	private void boardPassengersOrCars() throws RTIexception {
+		int[] queueState = stacjeStan.getOrDefault(polozenie, new int[]{0, 0});
+		int peopleInQueue = queueState[0];
+		int carsInQueue = queueState[1];
+		int typZaladunku = 0;
+		int liczbaZabranych = 0;
+		int czySamochodInt = 0;
+
+		if (carsInQueue > 0 && random.nextBoolean()) {
+			typZaladunku = 1;
+			liczbaZabranych = 1;
+			czySamochodInt = 1;
+		} else if (peopleInQueue > 0) {
+			typZaladunku = 2;
+			liczbaZabranych = Math.min(peopleInQueue, this.pojemnoscOsob);
+		}
+
+		if (typZaladunku > 0) {
+			liczbaKursow++;
+			log("Rozpoczynam załadunek na stacji " + polozenie + ": typ=" + typZaladunku + ", liczba=" + liczbaZabranych + ". Kurs nr: " + liczbaKursow);
+			HLAfloat64Time time = timeFactory.makeTime(fedamb.federateTime + fedamb.federateLookahead);
+			rtiamb.sendInteraction(zaladunekStartHandle, createBoardingParams(polozenie, typZaladunku, liczbaZabranych), generateTag(), time);
+
+			advanceTime(1.0);
+			updatePromAttributes(typZaladunku, liczbaZabranych, czySamochodInt);
+
+			HLAfloat64Time endTime = timeFactory.makeTime(fedamb.federateTime + fedamb.federateLookahead);
+			rtiamb.sendInteraction(zaladunekKoniecHandle, createStationParams(zaladunekKoniecHandle, polozenie), generateTag(), endTime);
+
+			advanceTime(0.5);
+		}
+	}
+
 	protected void startSimulation(int liczbaStacji, int pojemnoscOsob) {
 		log("Received StartSimulation interaction: stations=" + liczbaStacji);
 		this.liczbaStacji = liczbaStacji;
@@ -247,14 +299,18 @@ public class PromFederate
 		log("Odpłynięto. Następna stacja: " + this.polozenie);
 	}
 
-	private void sendInteraction(InteractionClassHandle handle, ParameterHandleValueMap params) throws RTIexception {
-		rtiamb.sendInteraction(handle, params, null);
-	}
 
 	private ParameterHandleValueMap createStationParams(InteractionClassHandle interactionHandle, int stationId) throws RTIexception {
 		ParameterHandleValueMap params = rtiamb.getParameterHandleValueMapFactory().create(2);
 		params.put(rtiamb.getParameterHandle(interactionHandle, "IdentyfikatorPromu"), encoderFactory.createHLAunicodeString(identyfikatorPromu).toByteArray());
 		params.put(rtiamb.getParameterHandle(interactionHandle, "IdentyfikatorStacji"), encoderFactory.createHLAinteger32BE(stationId).toByteArray());
+		return params;
+	}
+
+	private ParameterHandleValueMap createDepartureParams(int destinationStationId) throws RTIexception {
+		ParameterHandleValueMap params = rtiamb.getParameterHandleValueMapFactory().create(2);
+		params.put(rtiamb.getParameterHandle(odplyniecieHandle, "IdentyfikatorPromu"), encoderFactory.createHLAunicodeString(identyfikatorPromu).toByteArray());
+		params.put(rtiamb.getParameterHandle(odplyniecieHandle, "IdentyfikatorStacjiDocelowej"), encoderFactory.createHLAinteger32BE(destinationStationId).toByteArray());
 		return params;
 	}
 
@@ -267,54 +323,16 @@ public class PromFederate
 		return params;
 	}
 
-	private void boardPassengersOrCars() throws RTIexception {
-		int[] queueState = stacjeStan.getOrDefault(polozenie, new int[]{0, 0});
-		int peopleInQueue = queueState[0];
-		int carsInQueue = queueState[1];
-		int typZaladunku = 0;
-		int liczbaZabranych = 0;
-		boolean czySamochod = false;
-
-		if (carsInQueue > 0 && random.nextBoolean()) {
-			typZaladunku = 1;
-			liczbaZabranych = 1;
-			czySamochod = true;
-		} else if (peopleInQueue > 0) {
-			typZaladunku = 2;
-			liczbaZabranych = Math.min(peopleInQueue, this.pojemnoscOsob);
-		}
-
-		if (typZaladunku > 0) {
-			liczbaKursow++;
-			log("Rozpoczynam załadunek na stacji " + polozenie + ": typ=" + typZaladunku + ", liczba=" + liczbaZabranych);
-
-			sendInteraction(zaladunekStartHandle, createBoardingParams(polozenie, typZaladunku, liczbaZabranych));
-			advanceTime(1.0);
-			updatePromAttributes(typZaladunku, liczbaZabranych, czySamochod);
-
-			sendInteraction(zaladunekKoniecHandle, createStationParams(zaladunekKoniecHandle, polozenie));
-			advanceTime(0.5);
-		}
-	}
-
-	private void updatePromAttributes(int typZaladunku, int liczba, boolean czySamochod) throws RTIexception {
+	private void updatePromAttributes(int typZaladunku, int liczba, int czySamochodInt) throws RTIexception {
 		AttributeHandleValueMap attributes = rtiamb.getAttributeHandleValueMapFactory().create(6);
-
-		HLAunicodeString idEnc = encoderFactory.createHLAunicodeString(this.identyfikatorPromu);
-		HLAinteger32BE polozenieEnc = encoderFactory.createHLAinteger32BE(this.polozenie);
-		HLAinteger32BE typEnc = encoderFactory.createHLAinteger32BE(typZaladunku);
-		HLAinteger32BE liczbaEnc = encoderFactory.createHLAinteger32BE(liczba);
-		HLAboolean czySamochodEnc = encoderFactory.createHLAboolean(czySamochod);
-		HLAinteger32BE kursyEnc = encoderFactory.createHLAinteger32BE(this.liczbaKursow);
-
-		attributes.put(idPolaHandle, idEnc.toByteArray());
-		attributes.put(polozenieHandle, polozenieEnc.toByteArray());
-		attributes.put(typZaladunkuHandle, typEnc.toByteArray());
-		attributes.put(liczbaPasazerowHandle, liczbaEnc.toByteArray());
-		attributes.put(czySamochodHandle, czySamochodEnc.toByteArray());
-		attributes.put(liczbaKursowHandle, kursyEnc.toByteArray());
-
-		rtiamb.updateAttributeValues(promInstanceHandle, attributes, generateTag());
+		attributes.put(idPolaHandle, encoderFactory.createHLAunicodeString(this.identyfikatorPromu).toByteArray());
+		attributes.put(polozenieHandle, encoderFactory.createHLAinteger32BE(this.polozenie).toByteArray());
+		attributes.put(typZaladunkuHandle, encoderFactory.createHLAinteger32BE(typZaladunku).toByteArray());
+		attributes.put(liczbaPasazerowHandle, encoderFactory.createHLAinteger32BE(liczba).toByteArray());
+		attributes.put(czySamochodHandle, encoderFactory.createHLAinteger32BE(czySamochodInt).toByteArray());
+		attributes.put(liczbaKursowHandle, encoderFactory.createHLAinteger32BE(this.liczbaKursow).toByteArray());
+		HLAfloat64Time time = timeFactory.makeTime(fedamb.federateTime + fedamb.federateLookahead);
+		rtiamb.updateAttributeValues(promInstanceHandle, attributes, generateTag(), time);
 	}
 
 
@@ -327,9 +345,9 @@ public class PromFederate
 		// NOTE: Unfortunately, the LogicalTime/LogicalTimeInterval create code is
 		//       Portico specific. You will have to alter this if you move to a
 		//       different RTI implementation. As such, we've isolated it into a
-		//       method so that any change only needs to happen in a couple of spots 
+		//       method so that any change only needs to happen in a couple of spots
 		HLAfloat64Interval lookahead = timeFactory.makeInterval( fedamb.federateLookahead );
-		
+
 		////////////////////////////
 		// enable time regulation //
 		////////////////////////////
@@ -340,26 +358,25 @@ public class PromFederate
 		{
 			rtiamb.evokeMultipleCallbacks( 0.1, 0.2 );
 		}
-		
+
 		/////////////////////////////
 		// enable time constrained //
 		/////////////////////////////
 		this.rtiamb.enableTimeConstrained();
-		
+
 		// tick until we get the callback
 		while( fedamb.isConstrained == false )
 		{
 			rtiamb.evokeMultipleCallbacks( 0.1, 0.2 );
 		}
 	}
-	
+
 	/**
 	 * This method will inform the RTI about the types of data that the federate will
 	 * be creating, and the types of data we are interested in hearing about as other
 	 * federates produce it.
 	 */
 	private void publishAndSubscribe() throws RTIexception {
-		// Publikacja obiektu Prom
 		promHandle = rtiamb.getObjectClassHandle("HLAobjectRoot.Prom");
 		idPolaHandle = rtiamb.getAttributeHandle(promHandle, "IdentyfikatorPromu");
 		polozenieHandle = rtiamb.getAttributeHandle(promHandle, "Polozenie");
@@ -377,7 +394,6 @@ public class PromFederate
 		promAttributes.add(liczbaKursowHandle);
 		rtiamb.publishObjectClassAttributes(promHandle, promAttributes);
 
-		// Publikacja wszystkich interakcji
 		przybycieHandle = rtiamb.getInteractionClassHandle("HLAinteractionRoot.OperacjePromu.PrzybyciePromuNaStacje");
 		zaladunekStartHandle = rtiamb.getInteractionClassHandle("HLAinteractionRoot.OperacjePromu.ZaladunekRozpoczety");
 		zaladunekKoniecHandle = rtiamb.getInteractionClassHandle("HLAinteractionRoot.OperacjePromu.ZaladunekZakonczony");
@@ -387,7 +403,6 @@ public class PromFederate
 		rtiamb.publishInteractionClass(zaladunekKoniecHandle);
 		rtiamb.publishInteractionClass(odplyniecieHandle);
 
-		// Subskrypcja obiektu Stacja
 		stacjaHandle = rtiamb.getObjectClassHandle("HLAobjectRoot.Stacja");
 		stacjaIdHandle = rtiamb.getAttributeHandle(stacjaHandle, "IdentyfikatorStacji");
 		liczbaOsobHandle = rtiamb.getAttributeHandle(stacjaHandle, "LiczbaOczekujacychOsob");
@@ -399,9 +414,11 @@ public class PromFederate
 		stacjaAttributes.add(liczbaAutHandle);
 		rtiamb.subscribeObjectClassAttributes(stacjaHandle, stacjaAttributes);
 
-		// Subskrypcja interakcji startu
 		startSimulationHandle = rtiamb.getInteractionClassHandle("HLAinteractionRoot.ZarzadzanieSymulacja.RozpocznijSymulacje");
 		rtiamb.subscribeInteractionClass(startSimulationHandle);
+
+		wszystkieJednostkiPrzetransportowaneHandle = rtiamb.getInteractionClassHandle("HLAinteractionRoot.ZarzadzanieSymulacja.WszystkieJednostkiPrzetransportowane");
+		rtiamb.subscribeInteractionClass(wszystkieJednostkiPrzetransportowaneHandle);
 	}
 
 	/**
@@ -415,18 +432,13 @@ public class PromFederate
 		fedamb.isAdvancing = true;
 		HLAfloat64Time time = timeFactory.makeTime( fedamb.federateTime + timestep );
 		rtiamb.timeAdvanceRequest( time );
-		
+
 		// wait for the time advance to be granted. ticking will tell the
 		// LRC to start delivering callbacks to the federate
 		while( fedamb.isAdvancing )
 		{
 			rtiamb.evokeMultipleCallbacks( 0.1, 0.2 );
 		}
-	}
-
-	private short getTimeAsShort()
-	{
-		return (short)fedamb.federateTime;
 	}
 
 	private byte[] generateTag()
@@ -445,7 +457,7 @@ public class PromFederate
 		{
 			federateName = args[0];
 		}
-		
+
 		try
 		{
 			// run the example federate
