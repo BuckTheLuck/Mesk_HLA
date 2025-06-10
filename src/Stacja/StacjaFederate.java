@@ -217,7 +217,6 @@ public class StacjaFederate
 
 			if (!simulationFinished && areAllQueuesEmpty()) {
 				log(" Wszystkie kolejki puste. Kończenie symulacji");
-				advanceTime(2.0);
 				sendEndSimulationInteraction();
 				simulationFinished = true;
 				break;

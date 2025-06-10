@@ -216,11 +216,8 @@ public class PromFederate
 		}
 
 		while (fedamb.isRunning) {
-			updatePromAttributes(0, 0, 0); // Prom jest pusty
-
 			HLAfloat64Time arrivalTime = timeFactory.makeTime(fedamb.federateTime + fedamb.federateLookahead);
 			rtiamb.sendInteraction(przybycieHandle, createStationParams(przybycieHandle, polozenie), generateTag(), arrivalTime);
-
 			advanceTime(0.5);
 
 			boardPassengersOrCars();
@@ -234,6 +231,8 @@ public class PromFederate
 			rtiamb.sendInteraction(odplyniecieHandle, createDepartureParams(nextStation), generateTag(), departureTime);
 
 			moveToNextStation();
+
+			updatePromAttributes(0, 0, 0);
 
 			advanceTime(1.0);
 			log("Time Advanced to " + fedamb.federateTime);
@@ -262,18 +261,20 @@ public class PromFederate
 		int liczbaZabranych = 0;
 		int czySamochodInt = 0;
 
-		if (carsInQueue > 0 && random.nextBoolean()) {
+		boolean saSamochody = carsInQueue > 0;
+		boolean saLudzie = peopleInQueue > 0;
+
+		if (saSamochody && (!saLudzie || random.nextBoolean())) {
 			typZaladunku = 1;
 			liczbaZabranych = 1;
 			czySamochodInt = 1;
-		} else if (peopleInQueue > 0) {
+		} else if (saLudzie) {
 			typZaladunku = 2;
 			liczbaZabranych = Math.min(peopleInQueue, this.pojemnoscOsob);
 		}
 
 		if (typZaladunku > 0) {
-			liczbaKursow++;
-			log("Rozpoczynam załadunek na stacji " + polozenie + ": typ=" + typZaladunku + ", liczba=" + liczbaZabranych + ". Kurs nr: " + liczbaKursow);
+			log("Rozpoczynam załadunek na stacji " + polozenie + ": typ=" + typZaladunku + ", liczba=" + liczbaZabranych);
 			HLAfloat64Time time = timeFactory.makeTime(fedamb.federateTime + fedamb.federateLookahead);
 			rtiamb.sendInteraction(zaladunekStartHandle, createBoardingParams(polozenie, typZaladunku, liczbaZabranych), generateTag(), time);
 
@@ -296,6 +297,7 @@ public class PromFederate
 
 	private void moveToNextStation() {
 		this.polozenie = (this.polozenie + 1) % this.liczbaStacji;
+		liczbaKursow++;
 		log("Odpłynięto. Następna stacja: " + this.polozenie);
 	}
 
