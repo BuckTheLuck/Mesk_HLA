@@ -55,6 +55,9 @@ public class StacjaFederate
 	private List<Queue<Object>> carQueues = new ArrayList<>();
 	private Map<Integer, List<QueuedBoarding>> pendingBoardings = new HashMap<>();
 
+	private boolean simulationStartRequested = false;
+	private int requestedLiczbaStacji = 0;
+
 	private int liczbaStacji = 0;
 	private boolean simulationStarted = false;
 	private boolean simulationFinished = false;
@@ -215,45 +218,60 @@ public class StacjaFederate
 		// here is where we do the meat of our work. in each iteration, we will
 		// update the attribute values of the object we registered, and will
 		// send an interaction.
-		while (!simulationStarted) {
-			advanceTime(1.0);
-		}
-
-		// Inicjalizacja stacji
-		initializeStations();
-		FillQueues();
-		updateAllStationAttributes();
 		while (fedamb.isRunning) {
+			if (this.simulationStartRequested) {
+				startSimulation(this.requestedLiczbaStacji);
+				this.simulationStartRequested = false;
+			}
+			if (!simulationStarted) {
+				advanceTime(1.0);
+				continue;
+			}
+
 			updateAllStationAttributes();
 
 			if (!simulationFinished && areAllQueuesEmpty()) {
-				log(" Wszystkie kolejki puste. Kończenie symulacji");
+				log(" Wszystkie kolejki puste. Kończenie eksperymentu");
 				sendEndSimulationInteraction();
 				simulationFinished = true;
-				break;
 			}
 			advanceTime(1.0);
-			log("Time Advanced to " + fedamb.federateTime);
 		}
 
 		rtiamb.resignFederationExecution(ResignAction.DELETE_OBJECTS);
 		log("Resigned from Federation");
-		try {
-			rtiamb.destroyFederationExecution(Config.FEDERATION_NAME);
-			log("Destroyed Federation");
-		} catch (FederationExecutionDoesNotExist | FederatesCurrentlyJoined | RTIinternalError e) {
-			log("Didn't destroy federation: " + e.getMessage());
-		}
 	}
 
 	////////////////////////////////////////////////////////////////////////////
 	////////////////////////////// Helper Methods //////////////////////////////
 	////////////////////////////////////////////////////////////////////////////
-	protected void startSimulation(int liczbaStacji) {
-		log("Received StartSimulation interaction: stations=" + liczbaStacji);
-		this.liczbaStacji = liczbaStacji;
+	public void requestStartSimulation(int liczbaStacji) {
+		this.simulationStartRequested = true;
+		this.requestedLiczbaStacji = liczbaStacji;
+		log("Received request to start simulation with " + liczbaStacji + " stations.");
+	}
 
-		this.simulationStarted = true;
+	protected void startSimulation(int liczbaStacji) throws RTIexception {
+		if (!this.simulationStarted) { // First time setup
+			this.liczbaStacji = liczbaStacji;
+			initializeStations();
+			this.simulationStarted = true;
+		}
+		resetForNewExperiment();
+	}
+
+	private void resetForNewExperiment() {
+		log("Resetowanie stanu stacji na potrzeby nowego eksperymentu.");
+		for (Queue<Object> queue : peopleQueues) {
+			queue.clear();
+		}
+		for (Queue<Object> queue : carQueues) {
+			queue.clear();
+		}
+		pendingBoardings.clear();
+		FillQueues();
+		simulationFinished = false;
+		finalTripCount = 0;
 	}
 
 	private void FillQueues() {

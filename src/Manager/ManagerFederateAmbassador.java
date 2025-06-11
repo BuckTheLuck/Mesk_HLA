@@ -50,7 +50,7 @@ public class ManagerFederateAmbassador extends NullFederateAmbassador
 	protected boolean isReadyToRun       = false;
 
 	protected boolean isRunning       = true;
-
+	protected boolean isExperimentRunning = false;
 	//----------------------------------------------------------
 	//                      CONSTRUCTORS
 	//----------------------------------------------------------
@@ -140,12 +140,13 @@ public class ManagerFederateAmbassador extends NullFederateAmbassador
 				tripsDecoder.decode(theParameters.get(federate.rtiamb.getParameterHandle(interactionClass, "LiczbaWykonanychKursow")));
 				int finalTripCount = tripsDecoder.getValue();
 
-				log("================== SIMULATION END ==================");
-				log("Received 'WszystkieJednostkiPrzetransportowane' signal.");
-				log("Final number of trips: " + finalTripCount);
-				log("====================================================");
+				log("================== KONIEC EKSPERYMENTU ==================");
+				log("Otrzymano sygnał 'WszystkieJednostkiPrzetransportowane'.");
+				log("Końcowa liczba kursów w tym eksperymencie: " + finalTripCount);
+				log("========================================================");
 
-				this.isRunning = false;
+				federate.tripResults.add(finalTripCount);
+				this.isExperimentRunning = false;
 
 			} catch (RTIexception | DecoderException e) {
 				e.printStackTrace();

@@ -183,7 +183,7 @@ public class StacjaFederateAmbassador extends NullFederateAmbassador
 
 				HLAinteger32BE stacjeDecoder = new HLA1516eInteger32BE();
 				stacjeDecoder.decode(theParameters.get(federate.rtiamb.getParameterHandle(interactionClass, "LiczbaStacji")));
-				federate.startSimulation(stacjeDecoder.getValue());
+				federate.requestStartSimulation(stacjeDecoder.getValue());
 			}
 			else if (interactionClass.equals(federate.zaladunekZakonczonyHandle)) {
 				log("Received 'ZaladunekZakonczony' interaction!");

@@ -7,6 +7,7 @@ public class Config {
     public static final int LICZBA_STACJI = 3;
     public static final int POJEMNOSC_OSOB_PROMU = 10;
     public static final int MAKS_LACZNA_POJEMNOSC_STACJI = 50;
+    public static final int LICZBA_EKSPERYMENTOW = 10;
 
     public static final double CAR_PROBABILITY = 0.10;
 

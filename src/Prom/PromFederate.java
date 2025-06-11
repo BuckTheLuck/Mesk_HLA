@@ -289,10 +289,14 @@ public class PromFederate
 	}
 
 	protected void startSimulation(int liczbaStacji, int pojemnoscOsob) {
-		log("Received StartSimulation interaction: stations=" + liczbaStacji);
+		log("Otrzymano sygnał StartSimulation. Resetowanie stanu promu.");
 		this.liczbaStacji = liczbaStacji;
 		this.pojemnoscOsob = pojemnoscOsob;
 		this.simulationStarted = true;
+
+		this.liczbaKursow = 0;
+		this.polozenie = 0;
+		this.stacjeStan.clear();
 	}
 
 	private void moveToNextStation() {

@@ -27,7 +27,9 @@ import java.io.File;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class ManagerFederate
@@ -55,7 +57,7 @@ public class ManagerFederate
 
 	protected int currentTripCount = 0;
 	protected Map<Integer, int[]> stationQueuesState = new HashMap<>();
-
+	protected List<Integer> tripResults = new ArrayList<>();
 	//----------------------------------------------------------
 	//                      CONSTRUCTORS
 	//----------------------------------------------------------
@@ -204,13 +206,24 @@ public class ManagerFederate
 		// update the attribute values of the object we registered, and will
 		// send an interaction.
 
-		sendStartSimulationInteraction();
-		log("Flushing outgoing interaction queue...");
-		rtiamb.evokeMultipleCallbacks(0.0, 0.1);
-		while (fedamb.isRunning) {
-			advanceTime(1.0);
-			rtiamb.evokeMultipleCallbacks(0.0, 0.1);
+		for (int i = 0; i < Config.LICZBA_EKSPERYMENTOW; i++) {
+			log("=============== ROZPOCZYNAM EKSPERYMENT " + (i + 1) + "/" + Config.LICZBA_EKSPERYMENTOW + " ===============");
+			fedamb.isExperimentRunning = true;
+			sendStartSimulationInteraction();
+
+			while (fedamb.isExperimentRunning) {
+				advanceTime(1.0);
+				rtiamb.evokeMultipleCallbacks(0.0, 0.1);
+			}
+			log("=============== EKSPERYMENT " + (i + 1) + " ZAKOŃCZONY ===============");
 		}
+
+		double averageTrips = tripResults.stream().mapToInt(val -> val).average().orElse(0.0);
+		log("\n================== WYNIKI KOŃCOWE ==================");
+		log("Liczba eksperymentów: " + Config.LICZBA_EKSPERYMENTOW);
+		log("Maks. poj. kolejki na stacji: " + Config.MAKS_LACZNA_POJEMNOSC_STACJI);
+		log("Średnia liczba kursów potrzebna do obsłużenia kolejek: " + String.format("%.2f", averageTrips));
+		log("====================================================\n");
 
 		resignFederation();
 	}

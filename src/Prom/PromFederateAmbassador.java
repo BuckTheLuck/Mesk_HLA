@@ -196,7 +196,6 @@ public class PromFederateAmbassador extends NullFederateAmbassador
 			}
 		} else if (interactionClass.equals(federate.wszystkieJednostkiPrzetransportowaneHandle)) {
 			log("!!! Otrzymano sygnał końca symulacji. Zatrzymywanie pracy... !!!");
-			this.isRunning = false;
 		}
 	}
 
