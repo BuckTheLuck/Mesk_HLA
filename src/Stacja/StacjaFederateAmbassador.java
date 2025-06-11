@@ -137,7 +137,6 @@ public class StacjaFederateAmbassador extends NullFederateAmbassador
 
 		try {
 			if (theObjectClass.equals(federate.rtiamb.getObjectClassHandle("HLAobjectRoot.Prom"))) {
-				log("   ^^^ That's the Ferry! Storing its handle.");
 				this.promObjectHandle = theObject;
 			}
 		} catch (RTIexception e) {
@@ -186,6 +185,15 @@ public class StacjaFederateAmbassador extends NullFederateAmbassador
 				stacjeDecoder.decode(theParameters.get(federate.rtiamb.getParameterHandle(interactionClass, "LiczbaStacji")));
 				federate.startSimulation(stacjeDecoder.getValue());
 			}
+			else if (interactionClass.equals(federate.zaladunekZakonczonyHandle)) {
+				log("Received 'ZaladunekZakonczony' interaction!");
+
+				HLAinteger32BE stationIdDecoder = new HLA1516eInteger32BE();
+				stationIdDecoder.decode(theParameters.get(federate.rtiamb.getParameterHandle(interactionClass, "IdentyfikatorStacji")));
+
+				int stationId = stationIdDecoder.getValue();
+				federate.handleBoardingCompleted(stationId);
+			}
 
 			else if (interactionClass.equals(federate.zaladunekHandle)) {
 
@@ -204,7 +212,9 @@ public class StacjaFederateAmbassador extends NullFederateAmbassador
 
 				federate.handleBoarding(stationId, peopleCount, carCount);
 			}
-
+			else if (interactionClass.equals(federate.odplyniecieHandle)) {
+			log("Prom odplynal");
+			}
 			else if (interactionClass.equals(federate.endSimulationHandle)) {
 				log("END SIGNAL");
 				this.isRunning = false;

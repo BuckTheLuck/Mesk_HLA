@@ -47,12 +47,13 @@ public class StacjaFederate
 	// caches of handle types - set once we join a federation
 	protected ObjectClassHandle stationHandle;
 	protected AttributeHandle stationIdHandle, peopleInQueueHandle, carsInQueueHandle;
-	protected InteractionClassHandle zaladunekHandle, startSimulationHandle, endSimulationHandle;
+	protected InteractionClassHandle zaladunekHandle,zaladunekZakonczonyHandle,odplyniecieHandle, startSimulationHandle, endSimulationHandle;
 	protected AttributeHandle promTripCountHandle;
 	private List<ObjectInstanceHandle> stationInstanceHandles = new ArrayList<>();
 
 	private List<Queue<Object>> peopleQueues = new ArrayList<>();
 	private List<Queue<Object>> carQueues = new ArrayList<>();
+	private Map<Integer, List<QueuedBoarding>> pendingBoardings = new HashMap<>();
 
 	private int liczbaStacji = 0;
 	private boolean simulationStarted = false;
@@ -66,9 +67,19 @@ public class StacjaFederate
 	//----------------------------------------------------------
 	//                    INSTANCE METHODS
 	//----------------------------------------------------------
+	private static class QueuedBoarding {
+		int people;
+		int cars;
+		QueuedBoarding(int p, int c) {
+			this.people = p;
+			this.cars = c;
+		}
+	}
 	/**
 	 * This is just a helper method to make sure all logging it output in the same form
 	 */
+
+
 	private void log( String message )
 	{
 		System.out.println( "StationFederate   : " + message );
@@ -312,29 +323,40 @@ public class StacjaFederate
 	}
 
 	protected void handleBoarding(int stationId, int peopleCount, int carCount) {
-		// Logujemy informację o zdarzeniu
 		log("Handling boarding at station " + stationId + ": " + peopleCount + " people, " + carCount + " cars.");
 
-		// Wyświetlamy komunikaty o załadowanym towarze
-		if(peopleCount > 0) {
-			log("Stacja " + stationId + ": Potwierdzono załadunek " + peopleCount + " osób na prom.");
-		}
-		if(carCount > 0) {
-			log("Stacja " + stationId + ": Potwierdzono załadunek " + carCount + " samochodu na prom.");
-		}
+		pendingBoardings.computeIfAbsent(stationId, k -> new ArrayList<>())
+				.add(new QueuedBoarding(peopleCount, carCount));
+	}
 
-		// Aktualizujemy wewnętrzny stan kolejek - usuwamy załadowane jednostki
-		if (stationId >= 0 && stationId < this.liczbaStacji) {
-			for (int i = 0; i < peopleCount; i++) {
-				if (!peopleQueues.get(stationId).isEmpty()) {
-					peopleQueues.get(stationId).poll();
+	public void handleBoardingCompleted(int stationId) {
+		log("Boarding completed at station " + stationId);
+
+		List<QueuedBoarding> queue = pendingBoardings.get(stationId);
+		if (queue != null && !queue.isEmpty()) {
+			for (QueuedBoarding b : queue) {
+				log("   => Unloading from queue: people=" + b.people + ", cars=" + b.cars);
+
+				Queue<Object> peopleQueue = peopleQueues.get(stationId);
+				Queue<Object> carQueue = carQueues.get(stationId);
+
+				for (int i = 0; i < b.people; i++) {
+					if (!peopleQueue.isEmpty()) {
+						peopleQueue.poll();
+					} else {
+						log("   !! Nie ma wystarczająco ludzi w kolejce na stacji " + stationId);
+					}
+				}
+
+				for (int i = 0; i < b.cars; i++) {
+					if (!carQueue.isEmpty()) {
+						carQueue.poll();
+					} else {
+						log("   !! Nie ma wystarczająco samochodów w kolejce na stacji " + stationId);
+					}
 				}
 			}
-			for (int i = 0; i < carCount; i++) {
-				if (!carQueues.get(stationId).isEmpty()) {
-					carQueues.get(stationId).poll();
-				}
-			}
+			queue.clear();
 		}
 	}
 
@@ -394,6 +416,10 @@ public class StacjaFederate
 		rtiamb.subscribeInteractionClass(zaladunekHandle);
 		startSimulationHandle = rtiamb.getInteractionClassHandle("HLAinteractionRoot.ZarzadzanieSymulacja.RozpocznijSymulacje");
 		rtiamb.subscribeInteractionClass(startSimulationHandle);
+		zaladunekZakonczonyHandle = rtiamb.getInteractionClassHandle("HLAinteractionRoot.OperacjePromu.ZaladunekZakonczony");
+		rtiamb.subscribeInteractionClass(zaladunekZakonczonyHandle);
+		odplyniecieHandle = rtiamb.getInteractionClassHandle("HLAinteractionRoot.OperacjePromu.OdplynieciePromuZeStacji");
+		rtiamb.subscribeInteractionClass(odplyniecieHandle);
 
 		this.endSimulationHandle = rtiamb.getInteractionClassHandle("HLAinteractionRoot.ZarzadzanieSymulacja.WszystkieJednostkiPrzetransportowane");
 		rtiamb.publishInteractionClass(this.endSimulationHandle);

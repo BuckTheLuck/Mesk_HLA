@@ -145,7 +145,7 @@ public class ManagerFederateAmbassador extends NullFederateAmbassador
 				log("Final number of trips: " + finalTripCount);
 				log("====================================================");
 
-				this.isRunning = false; // Kończymy pętlę w federacie
+				this.isRunning = false;
 
 			} catch (RTIexception | DecoderException e) {
 				e.printStackTrace();
